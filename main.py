@@ -71,10 +71,17 @@ class FileStorageLayer(StorageLayer):
 
     def close(self) -> None:
         """TODO: Implement this method to close the storage safely"""
-        self.is_open = False
-        self.storage_path = None
-        print("Closed storage safely")
-        # Implement closing logic
+
+        if self.is_open:
+
+            self.is_open = False
+            self.storage_path = None
+            print("Closed storage safely")
+            # Implement closing logic#
+
+        else:
+            print("Already closed storage")
+            return
 
     def insert(self, table: str, record: bytes) -> int:
         """TODO: Implement this method to insert a record and return its ID"""

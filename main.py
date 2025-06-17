@@ -1,4 +1,5 @@
 import argparse
+import os
 from abc import ABC, abstractmethod
 from typing import Callable, Optional, List
 
@@ -57,18 +58,22 @@ class FileStorageLayer(StorageLayer):
 
     def __init__(self):
         self.is_open = False
-        self.storage_path = None
+
         # Add any other necessary instance variables here
 
     def open(self, path: str) -> None:
         """TODO: Implement this method to open storage at the specified path"""
+        os.makedirs(path, exist_ok=True)
         self.storage_path = path
         self.is_open = True
+        print("Opened storage at", self.storage_path)
         # Implement storage initialization/opening logic
 
     def close(self) -> None:
         """TODO: Implement this method to close the storage safely"""
         self.is_open = False
+        self.storage_path = None
+        print("Closed storage safely")
         # Implement closing logic
 
     def insert(self, table: str, record: bytes) -> int:

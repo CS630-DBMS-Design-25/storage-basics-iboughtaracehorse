@@ -102,11 +102,18 @@ class FileStorageLayer(StorageLayer):
                 if not b_id:
                     break
                 r_id = struct.unpack(">I", b_id)[0]
-                record = file.read(struct.calcsize(">I"))
+
+                b_len = file.read(4)
+                if not b_len:
+                    break
+                len = struct.unpack(">I", b_len)[0]
+
+                record = file.read(len)
 
                 if r_id == record_id:
                     return record
-                        # Implement retrieval logic
+                    # Implement retrieval logic
+        print("Record not found")
 
     def update(self, table: str, record_id: int, updated_record: bytes) -> None:
         """TODO: Implement this method to update a record"""

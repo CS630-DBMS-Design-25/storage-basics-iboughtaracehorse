@@ -89,7 +89,24 @@ class FileStorageLayer(StorageLayer):
     def insert(self, table: str, record: bytes) -> int:
         """TODO: Implement this method to insert a record and return its ID"""
         # Implement insert logic
-        return 0  # Replace with actual implementation
+
+        path = os.path.join(self.storage_path, f"{table}.{record}")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        id = 1
+
+        try:
+            with open(path, "rb") as file:
+                while file.read(4):
+                    file.seek(len(record), 1)
+                    id += 1
+        except FileNotFoundError:
+            pass
+
+        with open(path, "ab") as file:
+            file.write(struct.pack("I", id))
+            file.write(record)
+
+        return id  # Replace with actual implementation
 
     def get(self, table: str, record_id: int) -> bytes:
         """TODO: Implement this method to retrieve a record by ID"""

@@ -1,5 +1,6 @@
 import argparse
 import os
+import struct
 from abc import ABC, abstractmethod
 from typing import Callable, Optional, List
 
@@ -62,7 +63,9 @@ class FileStorageLayer(StorageLayer):
         # Add any other necessary instance variables here
 
     def open(self, path: str) -> None:
+
         """TODO: Implement this method to open storage at the specified path"""
+
         os.makedirs(path, exist_ok=True)
         self.storage_path = path
         self.is_open = True
@@ -90,8 +93,20 @@ class FileStorageLayer(StorageLayer):
 
     def get(self, table: str, record_id: int) -> bytes:
         """TODO: Implement this method to retrieve a record by ID"""
-        # Implement retrieval logic
-        return b""  # Replace with actual implementation
+
+        path = os.path.join(self.storage_path, table)
+
+        with open(path, "rb") as file:
+            while True:
+                b_id = file.read(4)
+                if not b_id:
+                    break
+                r_id = struct.unpack(">I", b_id)[0]
+                record = file.read(struct.calcsize(">I"))
+
+                if r_id == record_id:
+                    return record
+                        # Implement retrieval logic
 
     def update(self, table: str, record_id: int, updated_record: bytes) -> None:
         """TODO: Implement this method to update a record"""

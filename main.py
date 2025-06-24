@@ -139,8 +139,37 @@ class FileStorageLayer(StorageLayer):
 
     def delete(self, table: str, record_id: int) -> None:
         """TODO: Implement this method to delete a record"""
-        # Implement delete logic
-        pass
+
+        path = os.path.join(self.storage_path, table)
+        cur_path = path + ".tmp"
+        can_delete = False
+
+        with open(path, "rb") as input_file, open(cur_path, "wb") as output_file:
+           while True:
+                b_id = input_file.read(4)
+
+                if not b_id:
+                    break
+
+                r_id = struct.unpack(">I", b_id)[0]
+                b_len = input_file.read(4)
+
+                if not b_len:
+                    break
+
+                len = struct.unpack(">I", b_len)[0]
+                record = input_file.read(len)
+
+                if r_id == record_id:
+                    can_delete = True
+                    continue
+                else: can_delete = False, output_file.write(b_id), output_file.write(b_len), output_file.write(record)
+
+       if not can_delete:
+           os.remove(cur_path)
+           print("Record not found")
+
+       os.replace(cur_path, path) # Implement delete logic
 
     def scan(self, table: str, callback: Optional[Callable[[int, bytes], bool]] = None,
              projection: Optional[List[int]] = None, filter_func: Optional[Callable[[bytes], bool]] = None) -> List[

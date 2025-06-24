@@ -134,8 +134,44 @@ class FileStorageLayer(StorageLayer):
 
     def update(self, table: str, record_id: int, updated_record: bytes) -> None:
         """TODO: Implement this method to update a record"""
+
+        path = os.path.join(self.storage_path, table)
+        cur_path = path + ".tmp"
+        can_update = False
+
+        with open(path, "rb") as input_file, open(cur_path, "wb") as output_file:
+            while True:
+                b_id = input_file.read(4)
+                if not b_id:
+                    break
+
+                r_id = struct.unpack(">I", b_id)[0]
+                b_len = input_file.read(4)
+
+                if not b_len:
+                    break
+
+                len = struct.unpack(">I", b_len)[0]
+                record = input_file.read(len)
+
+                if r_id == record_id:
+                    can_update = True
+                    output_file.write(struct.pack(">I", r_id))
+                    output_file.write(struct.pack(">I", len(updated_record)))
+                    output_file.write(updated_record)
+
+                else:
+                    output_file.write(b_id)
+                    output_file.write(b_len)
+                    output_file.write(record)
+
+        if not can_update:
+            os.remove(cur_path)
+            print("Record cannot be updatesd")
+
+        os.replace(cur_path, path)
+
         # Implement update logic
-        pass
 
     def delete(self, table: str, record_id: int) -> None:
         """TODO: Implement this method to delete a record"""
@@ -145,7 +181,8 @@ class FileStorageLayer(StorageLayer):
         can_delete = False
 
         with open(path, "rb") as input_file, open(cur_path, "wb") as output_file:
-           while True:
+            while True:
+
                 b_id = input_file.read(4)
 
                 if not b_id:
@@ -163,13 +200,16 @@ class FileStorageLayer(StorageLayer):
                 if r_id == record_id:
                     can_delete = True
                     continue
-                else: can_delete = False, output_file.write(b_id), output_file.write(b_len), output_file.write(record)
 
-       if not can_delete:
-           os.remove(cur_path)
-           print("Record not found")
+                output_file.write(b_id)
+                output_file.write(b_len)
+                output_file.write(record)
 
-       os.replace(cur_path, path) # Implement delete logic
+        if not can_delete:
+            os.remove(cur_path)
+            print("Record not found")
+        else:
+            os.replace(cur_path, path)
 
     def scan(self, table: str, callback: Optional[Callable[[int, bytes], bool]] = None,
              projection: Optional[List[int]] = None, filter_func: Optional[Callable[[bytes], bool]] = None) -> List[

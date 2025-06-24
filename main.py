@@ -59,8 +59,9 @@ class FileStorageLayer(StorageLayer):
 
     def __init__(self):
         self.is_open = False
-        self.file = None
+        #self.file = None
         self.buffer = {}
+        self.next_r_id = {}
 
         # Add any other necessary instance variables here
 
@@ -264,13 +265,16 @@ class FileStorageLayer(StorageLayer):
     def flush(self) -> None:
         """TODO: Implement this method to flush data to disk"""
 
-        for table, record in self.buffer.items():
+        for table, records in self.buffer.items():
             peth = os.path.join(self.storage_path, table)
+
             with open(peth, "wb") as file:
-                for r_id in record:
+
+                for r_id, record in records:
                     file.write(struct.pack(">I", r_id))
                     file.write(struct.pack(">I", len(record)))
                     file.write(record)
+
         self.buffer = {}
         # Implement flush logic
 

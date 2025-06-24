@@ -93,23 +93,33 @@ class FileStorageLayer(StorageLayer):
         """TODO: Implement this method to insert a record and return its ID"""
         # Implement insert logic
 
-        path = os.path.join(self.storage_path, f"{table}.{record}")
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        id = 1
+        # path = os.path.join(self.storage_path, f"{table}.{record}")
+        # os.makedirs(os.path.dirname(path), exist_ok=True)
+        # id = 1
+        #
+        # try:
+        #     with open(path, "rb") as file:
+        #         while file.read(4):
+        #             file.seek(len(record), 1)
+        #             id += 1
+        # except FileNotFoundError:
+        #     pass
+        #
+        # with open(path, "ab") as file:
+        #     file.write(struct.pack("I", id))
+        #     file.write(record)
+        #
+        # return id  # Replace with actual implementation
 
-        try:
-            with open(path, "rb") as file:
-                while file.read(4):
-                    file.seek(len(record), 1)
-                    id += 1
-        except FileNotFoundError:
-            pass
+        if table not in self.buffer:
+            self.buffer[table] = {}
+            self.next_r_id[table] = 1 #this is so much easier. should have started with implementing flush first and not this
 
-        with open(path, "ab") as file:
-            file.write(struct.pack("I", id))
-            file.write(record)
+        r_id = self.next_r_id[table]
+        self.next_r_id[table] += 1
+        self.buffer[table][r_id] = record
 
-        return id  # Replace with actual implementation
+        return r_id
 
     def get(self, table: str, record_id: int) -> bytes:
         """TODO: Implement this method to retrieve a record by ID"""

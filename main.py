@@ -215,8 +215,49 @@ class FileStorageLayer(StorageLayer):
              projection: Optional[List[int]] = None, filter_func: Optional[Callable[[bytes], bool]] = None) -> List[
         bytes]:
         """TODO: Implement this method to scan records in a table"""
+
+        path = os.path.join(self.storage_path, table)
+        result = []
+
+        with open(path, "rb") as file:
+            while True:
+                b_id = file.read(4)
+
+                if not b_id:
+                    break
+
+                r_id = struct.unpack(">I", b_id)[0]
+                b_len = file.read(4)
+
+                if not b_len:
+                    break
+
+                len = struct.unpack(">I", b_len)[0]
+                record = file.read(len)
+
+                if callback:
+                    if not callback(r_id, record):
+                        break
+
+                if filter_func:
+                    if not filter_func(r_id, record):
+                        break
+
+                if projection:
+                    parts = record.split("\n") #not sure if this is the correct one
+                    projected = []
+
+                    for i in projection:
+                        if i < len(parts):
+                            projected.append(parts[i])
+                    new_record = "".join(projected)
+                    result.append(new_record)
+
+                else:
+                    result.append(record)
+
         # Implement scan logic
-        return []
+        return result
 
     def flush(self) -> None:
         """TODO: Implement this method to flush data to disk"""

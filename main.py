@@ -148,8 +148,11 @@ class FileStorageLayer(StorageLayer):
     def update(self, table: str, record_id: int, updated_record: bytes) -> None:
         """TODO: Implement this method to update a record"""
 
-        if table not in self.buffer:
-            self.buffer[table] = {}
+        if table in self.buffer:
+            for i, (r_id, record) in enumerate(self.buffer[table].items()):
+                if r_id == record_id:
+                    self.buffer[table][i] = (r_id, updated_record)
+                    return
 
         path = os.path.join(self.storage_path, table)
         cur_path = path + ".tmp"

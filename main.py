@@ -148,6 +148,9 @@ class FileStorageLayer(StorageLayer):
     def update(self, table: str, record_id: int, updated_record: bytes) -> None:
         """TODO: Implement this method to update a record"""
 
+        if table not in self.buffer:
+            self.buffer[table] = {}
+
         path = os.path.join(self.storage_path, table)
         cur_path = path + ".tmp"
         can_update = False
@@ -182,7 +185,9 @@ class FileStorageLayer(StorageLayer):
             os.remove(cur_path)
             print("Record cannot be updatesd")
 
-        os.replace(cur_path, path)
+        else:
+            os.replace(cur_path, path)
+
 
         # Implement update logic
 

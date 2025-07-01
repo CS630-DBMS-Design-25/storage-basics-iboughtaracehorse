@@ -113,7 +113,7 @@ class FileStorageLayer(StorageLayer):
 
         if table not in self.buffer:
             self.buffer[table] = {}
-            self.next_r_id[table] = 1 #this is so much easier. should have started with implementing flush first and not this
+            self.next_r_id[table] = 1
 
         r_id = self.next_r_id[table]
         self.next_r_id[table] += 1
@@ -123,6 +123,9 @@ class FileStorageLayer(StorageLayer):
 
     def get(self, table: str, record_id: int) -> bytes:
         """TODO: Implement this method to retrieve a record by ID"""
+
+        if table in self.buffer and record_id in self.buffer[table]:
+            return self.buffer[table][record_id]
 
         path = os.path.join(self.storage_path, table)
 
@@ -144,15 +147,14 @@ class FileStorageLayer(StorageLayer):
                     return record
                     # Implement retrieval logic
         print("Record not found")
+        #return None
 
     def update(self, table: str, record_id: int, updated_record: bytes) -> None:
         """TODO: Implement this method to update a record"""
 
-        if table in self.buffer:
-            for i, (r_id, record) in enumerate(self.buffer[table].items()):
-                if r_id == record_id:
-                    self.buffer[table][i] = (r_id, updated_record)
-                    return
+        if table in self.buffer and record_id in self.buffer[table]:
+            self.buffer[table][record_id] = updated_record
+            return
 
         path = os.path.join(self.storage_path, table)
         cur_path = path + ".tmp"
@@ -261,17 +263,17 @@ class FileStorageLayer(StorageLayer):
                         break
 
                 if filter_func:
-                    if not filter_func(r_id, record):
+                    if not filter_func(record):
                         break
 
                 if projection:
-                    parts = record.split("\n") #not sure if this is the correct one
+                    parts = record.split(b"\n") #not sure if this is the correct one
                     projected = []
 
                     for i in projection:
                         if i < len(parts):
                             projected.append(parts[i])
-                    new_record = "".join(projected)
+                    new_record = b"".join(projected)
                     result.append(new_record)
 
                 else:
@@ -288,7 +290,7 @@ class FileStorageLayer(StorageLayer):
 
             with open(peth, "wb") as file:
 
-                for r_id, record in records:
+                for r_id, record in records.items():
                     file.write(struct.pack(">I", r_id))
                     file.write(struct.pack(">I", len(record)))
                     file.write(record)

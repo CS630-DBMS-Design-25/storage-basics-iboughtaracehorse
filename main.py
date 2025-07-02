@@ -1,9 +1,18 @@
 import argparse
 import os
 import struct
+
 from abc import ABC, abstractmethod
 from typing import Callable, Optional, List
 
+from lark import Lark
+from sql import SQLTransformer
+from ast import CreateTable, Insert, Select
+
+with open("sql.lark") as f:
+    sql_grammar = f.read()
+
+sql_parser = Lark(sql_grammar, parser="lalr")
 
 class StorageLayer(ABC):
     """Abstract base class that defines the interface for a simple storage system.
@@ -297,6 +306,11 @@ class FileStorageLayer(StorageLayer):
 
         self.buffer = {}
         # Implement flush logic
+
+def parse_query(query: str):
+    tree = sql_parser.parse(query)
+    ast = SQLTransformer().transform(tree)
+    return ast
 
 def main():
     storage = FileStorageLayer()  # Students will implement this class

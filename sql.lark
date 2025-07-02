@@ -1,0 +1,24 @@
+start: stmt+
+
+stmt: create_stmt ";"
+    | insert_stmt ";"
+    | select_stmt ";"
+
+create_stmt: "CREATE" "TABLE" NAME "(" column_def_list ")"
+column_def_list: NAME ("," NAME)*
+
+insert_stmt: "INSERT" "INTO" NAME "VALUES" "(" value_list ")"
+value_list: value ("," value)*
+
+select_stmt: "SELECT" column_list "FROM" NAME
+column_list: "*" -> select_all
+           | NAME ("," NAME)*
+
+value: SIGNED_NUMBER     -> number
+     | ESCAPED_STRING    -> string
+
+%import common.CNAME -> NAME
+%import common.SIGNED_NUMBER
+%import common.ESCAPED_STRING
+%import common.WS
+%ignore WS

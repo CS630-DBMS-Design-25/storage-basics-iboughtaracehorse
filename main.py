@@ -124,35 +124,38 @@ class FileStorageLayer(StorageLayer):
     def get(self, table: str, record_id: int) -> bytes:
         """TODO: Implement this method to retrieve a record by ID"""
 
+        if table in self.buffer and record_id in self.buffer[table]:
+            return self.buffer[table][record_id]
+
         path = os.path.join(self.storage_path, table)
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"Table '{table}' not found on disk. FLUSH FIRST PLEASE")
 
         with open(path, "rb") as file:
-            while True:
-                b_id = file.read(4)
-                if not b_id:
-                    break
-                r_id = struct.unpack(">I", b_id)[0]
+                while True:
+                    b_id = file.read(4)
+                    if not b_id:
+                        break
+                    r_id = struct.unpack(">I", b_id)[0]
 
-                b_len = file.read(4)
-                if not b_len:
-                    break
-                len = struct.unpack(">I", b_len)[0]
+                    b_len = file.read(4)
+                    if not b_len:
+                        break
+                    len = struct.unpack(">I", b_len)[0]
 
-                record = file.read(len)
+                    record = file.read(len)
 
-                if r_id == record_id:
-                    return record
-                    # Implement retrieval logic
+                    if r_id == record_id:
+                        return record
+
         print("Record not found")
 
     def update(self, table: str, record_id: int, updated_record: bytes) -> None:
         """TODO: Implement this method to update a record"""
 
-        if table in self.buffer:
-            for i, (r_id, record) in enumerate(self.buffer[table].items()):
-                if r_id == record_id:
-                    self.buffer[table][i] = (r_id, updated_record)
-                    return
+        if table in self.buffer and record_id in self.buffer[table]:
+            self.buffer[table][record_id] = updated_record
+            return
 
         path = os.path.join(self.storage_path, table)
         cur_path = path + ".tmp"
@@ -170,8 +173,8 @@ class FileStorageLayer(StorageLayer):
                 if not b_len:
                     break
 
-                len = struct.unpack(">I", b_len)[0]
-                record = input_file.read(len)
+                length = struct.unpack(">I", b_len)[0]
+                record = input_file.read(length)
 
                 if r_id == record_id:
                     can_update = True
@@ -215,8 +218,8 @@ class FileStorageLayer(StorageLayer):
                 if not b_len:
                     break
 
-                len = struct.unpack(">I", b_len)[0]
-                record = input_file.read(len)
+                length = struct.unpack(">I", b_len)[0]
+                record = input_file.read(length)
 
                 if r_id == record_id:
                     can_delete = True
@@ -253,19 +256,19 @@ class FileStorageLayer(StorageLayer):
                 if not b_len:
                     break
 
-                len = struct.unpack(">I", b_len)[0]
-                record = file.read(len)
+                length = struct.unpack(">I", b_len)[0]
+                record = file.read(length)
 
                 if callback:
                     if not callback(r_id, record):
                         break
 
                 if filter_func:
-                    if not filter_func(r_id, record):
+                    if not filter_func(record):
                         break
 
                 if projection:
-                    parts = record.split("\n") #not sure if this is the correct one
+                    parts = record.decode().split("\n") #not sure if this is the correct one
                     projected = []
 
                     for i in projection:
@@ -288,7 +291,7 @@ class FileStorageLayer(StorageLayer):
 
             with open(peth, "wb") as file:
 
-                for r_id, record in records:
+                for r_id, record in records.items():
                     file.write(struct.pack(">I", r_id))
                     file.write(struct.pack(">I", len(record)))
                     file.write(record)

@@ -5,6 +5,9 @@ class CreateTable(ASTNode):
         self.table_name = table_name
         self.columns = columns
 
+    def __repr__(self):
+        return f"Created table({self.table_name}, {self.columns})"
+
 class Insert(ASTNode):
     def __init__(self, table_name: str, values: list[str]):
         self.table_name = table_name
@@ -14,3 +17,5 @@ class Select(ASTNode):
     def __init__(self, columns: list[str], table_name: str):
         self.table_name = table_name
         self.columns = columns
+
+class SelectAll(ASTNode): pass

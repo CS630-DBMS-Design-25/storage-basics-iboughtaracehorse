@@ -1,18 +1,12 @@
 import argparse
 import os
 import struct
-
 from abc import ABC, abstractmethod
 from typing import Callable, Optional, List
 
 from lark import Lark
 from sql import SQLTransformer
-from ast import CreateTable, Insert, Select
-
-with open("sql.lark") as f:
-    sql_grammar = f.read()
-
-sql_parser = Lark(sql_grammar, parser="lalr")
+from sqlast import CreateTable, Insert, Select
 
 class StorageLayer(ABC):
     """Abstract base class that defines the interface for a simple storage system.
@@ -71,6 +65,7 @@ class FileStorageLayer(StorageLayer):
         #self.file = None
         self.buffer = {}
         self.next_r_id = {}
+        self.storage_path = None
 
         # Add any other necessary instance variables here
 
@@ -122,7 +117,7 @@ class FileStorageLayer(StorageLayer):
 
         if table not in self.buffer:
             self.buffer[table] = {}
-            self.next_r_id[table] = 1
+            self.next_r_id[table] = 1 #this is so much easier. should have started with implementing flush first and not this
 
         r_id = self.next_r_id[table]
         self.next_r_id[table] += 1
@@ -137,26 +132,27 @@ class FileStorageLayer(StorageLayer):
             return self.buffer[table][record_id]
 
         path = os.path.join(self.storage_path, table)
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"Table '{table}' not found on disk. FLUSH FIRST PLEASE")
 
         with open(path, "rb") as file:
-            while True:
-                b_id = file.read(4)
-                if not b_id:
-                    break
-                r_id = struct.unpack(">I", b_id)[0]
+                while True:
+                    b_id = file.read(4)
+                    if not b_id:
+                        break
+                    r_id = struct.unpack(">I", b_id)[0]
 
-                b_len = file.read(4)
-                if not b_len:
-                    break
-                len = struct.unpack(">I", b_len)[0]
+                    b_len = file.read(4)
+                    if not b_len:
+                        break
+                    len = struct.unpack(">I", b_len)[0]
 
-                record = file.read(len)
+                    record = file.read(len)
 
-                if r_id == record_id:
-                    return record
-                    # Implement retrieval logic
+                    if r_id == record_id:
+                        return record
+
         print("Record not found")
-        #return None
 
     def update(self, table: str, record_id: int, updated_record: bytes) -> None:
         """TODO: Implement this method to update a record"""
@@ -181,8 +177,8 @@ class FileStorageLayer(StorageLayer):
                 if not b_len:
                     break
 
-                len = struct.unpack(">I", b_len)[0]
-                record = input_file.read(len)
+                length = struct.unpack(">I", b_len)[0]
+                record = input_file.read(length)
 
                 if r_id == record_id:
                     can_update = True
@@ -226,8 +222,8 @@ class FileStorageLayer(StorageLayer):
                 if not b_len:
                     break
 
-                len = struct.unpack(">I", b_len)[0]
-                record = input_file.read(len)
+                length = struct.unpack(">I", b_len)[0]
+                record = input_file.read(length)
 
                 if r_id == record_id:
                     can_delete = True
@@ -264,8 +260,8 @@ class FileStorageLayer(StorageLayer):
                 if not b_len:
                     break
 
-                len = struct.unpack(">I", b_len)[0]
-                record = file.read(len)
+                length = struct.unpack(">I", b_len)[0]
+                record = file.read(length)
 
                 if callback:
                     if not callback(r_id, record):
@@ -276,13 +272,13 @@ class FileStorageLayer(StorageLayer):
                         break
 
                 if projection:
-                    parts = record.split(b"\n") #not sure if this is the correct one
+                    parts = record.decode().split("\n") #not sure if this is the correct one
                     projected = []
 
                     for i in projection:
                         if i < len(parts):
                             projected.append(parts[i])
-                    new_record = b"".join(projected)
+                    new_record = "".join(projected)
                     result.append(new_record)
 
                 else:
@@ -307,13 +303,47 @@ class FileStorageLayer(StorageLayer):
         self.buffer = {}
         # Implement flush logic
 
-def parse_query(query: str):
-    tree = sql_parser.parse(query)
-    ast = SQLTransformer().transform(tree)
-    return ast
+def execute_sql(stmt, storage):
 
-def main():
+    if not storage.is_open or not storage.storage_path:
+        print("OPEN FIRTS!!!!!")
+        return
+
+    if isinstance(stmt, CreateTable):
+        print(f"Creating table '{stmt.table_name}' with columns: {stmt.columns}")
+
+        storage.buffer[stmt.table_name] = {}
+        storage.next_r_id[stmt.table_name] = 1
+
+    elif isinstance(stmt, Insert):
+        values_joined = "\n".join(map(str, stmt.values)).encode()
+        r_id = storage.insert(stmt.table_name, values_joined)
+        print(f"Inserted into {stmt.table_name} with ID {r_id}")
+
+    elif isinstance(stmt, Select):
+        def callback(rid, record):
+            print("ID:", rid)
+            parts = record.decode().split("\n")
+            if stmt.columns == ["*"]:
+                print(" | ".join(parts))
+            else:
+                projection = [stmt.columns.index(col) for col in stmt.columns if col in stmt.columns]
+                selected = [parts[i] for i in projection if i < len(parts)]
+                print(" | ".join(selected))
+            return True
+
+        storage.scan(stmt.table_name, callback=callback)
+
+    else:
+        print("Unknown SQL statement:", stmt)
+
+def main(): 
     storage = FileStorageLayer()  # Students will implement this class
+
+    with open("sql.lark") as f:
+        grammar = f.read()
+
+    sql_parser = Lark(grammar, parser="lalr", transformer=SQLTransformer())
 
     parser = argparse.ArgumentParser(description="CLI for StorageLayer Testing")
     subparsers = parser.add_subparsers(dest="command", help="Command to execute")
@@ -346,6 +376,7 @@ def main():
     scan_parser.add_argument("--projection", type=int, nargs="*", help="Fields to project")
 
     print("Storage Layer CLI - Type 'help' for available commands or 'exit' to quit")
+
     while True:
         try:
             command_input = input("storage-cli> ").strip()
@@ -357,10 +388,18 @@ def main():
                 parser.print_help()
                 continue
 
-            # Parse the command
+            if command_input.lower().startswith("sql "):
+                sql_command = command_input[4:]
+                try:
+                    stmts = sql_parser.parse(sql_command)
+                    for stmt in stmts:
+                        execute_sql(stmt, storage)
+                except Exception as e:
+                    print("SQL Error:", e)
+                continue
+
             args = parser.parse_args(command_input.split())
 
-            # Execute the appropriate command
             if args.command == 'open':
                 storage.open(args.path)
                 print(f"Storage opened at {args.path}")
@@ -394,7 +433,6 @@ def main():
                 print(f"Unknown command: {args.command}")
 
         except SystemExit:
-            # Catch the SystemExit exception that argparse raises
             continue
         except Exception as e:
             print(f"Error: {e}")

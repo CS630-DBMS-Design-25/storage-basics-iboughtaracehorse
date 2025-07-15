@@ -1,5 +1,6 @@
 from lark import Transformer
-from ast import CreateTable, Insert, Select
+from sqlast import CreateTable, Insert, Select, SelectAll
+
 
 class SQLTransformer(Transformer):
     def NAME(self, token):
@@ -9,7 +10,7 @@ class SQLTransformer(Transformer):
         return int(token[0])
 
     def string(self, token):
-        return str(token[0])[1:-1]
+        return token[0][1:-1]
 
     def value_list(self, items):
         return items
@@ -31,12 +32,12 @@ class SQLTransformer(Transformer):
         return Insert(table_name, values)
 
     def select_all(self, _):
-        return ["*"]
+        return SelectAll()
 
     def select_stmt(self, items):
-        columns = items[0]
-        table_name = items[1]
-        return Select(columns, table_name)
+        columns = items[1]
+        table_name = items[0]
+        return Select(table_name, columns)
 
     def stmt(self, items):
         return items[0]

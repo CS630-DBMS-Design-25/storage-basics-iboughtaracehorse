@@ -23,7 +23,7 @@ class SQLTransformer(Transformer):
 
     def create_stmt(self, items):
         table_name = items[0]
-        columns = items[1:]
+        columns = items[1]
         return CreateTable(table_name, columns)
 
     def insert_stmt(self, items):

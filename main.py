@@ -66,6 +66,7 @@ class FileStorageLayer(StorageLayer):
         self.buffer = {}
         self.next_r_id = {}
         self.storage_path = None
+        self.schemas = {}
 
         # Add any other necessary instance variables here
 
@@ -76,6 +77,9 @@ class FileStorageLayer(StorageLayer):
         os.makedirs(path, exist_ok=True)
         self.storage_path = path
         self.is_open = True
+
+        self.load_schemas()
+
         print("Opened storage at", self.storage_path)
         # Implement storage initialization/opening logic
 
@@ -92,6 +96,29 @@ class FileStorageLayer(StorageLayer):
         else:
             print("Already closed storage")
             return
+
+    def schema_path(self, table_name: str) -> str:
+        return os.path.join(self.storage_path, f"{table_name}.schema")
+
+    def save_schema(self, table_name: str) -> None:
+        path = self.schema_path(table_name)
+
+        with open(path, "w") as f:
+            f.write(",".join(self.schemas[table_name]))
+
+    def load_schemas(self) -> None:
+        self.schemas = {}
+
+        for filename in os.listdir(self.storage_path):
+
+            if filename.endswith(".schema"):
+
+                table_name = filename[:-7]
+                path = self.schema_path(table_name)
+
+                with open(path, "r") as f:
+                    columns = f.read().strip().split(",")
+                    self.schemas[table_name] = columns
 
     def insert(self, table: str, record: bytes) -> int:
         """TODO: Implement this method to insert a record and return its ID"""
@@ -310,25 +337,57 @@ def execute_sql(stmt, storage):
         return
 
     if isinstance(stmt, CreateTable):
+
+        if len(stmt.columns) != len(set(stmt.columns)):
+            print(f"please do not enter duplicate columns while using CREATE TABLE {stmt.table_name}")
+            return
+
         print(f"Creating table '{stmt.table_name}' with columns: {stmt.columns}")
 
+        storage.schemas[stmt.table_name] = stmt.columns
         storage.buffer[stmt.table_name] = {}
         storage.next_r_id[stmt.table_name] = 1
 
+        storage.save_schema(stmt.table_name)
+
     elif isinstance(stmt, Insert):
+
+        if stmt.table_name not in storage.schemas:
+            print(f"Table '{stmt.table_name}' does not exist")
+            return
+
+        schema = storage.schemas[stmt.table_name]
+
+        if len(stmt.values) != len(schema):
+            print(f"Insert column value does not match schema!!!")
+            return
+
         values_joined = "\n".join(map(str, stmt.values)).encode()
         r_id = storage.insert(stmt.table_name, values_joined)
         print(f"Inserted into {stmt.table_name} with ID {r_id}")
 
     elif isinstance(stmt, Select):
+
         def callback(rid, record):
             print("ID:", rid)
             parts = record.decode().split("\n")
+
             if stmt.columns == ["*"]:
                 print(" | ".join(parts))
+
             else:
-                projection = [stmt.columns.index(col) for col in stmt.columns if col in stmt.columns]
-                selected = [parts[i] for i in projection if i < len(parts)]
+                schema = storage.schemas.get(stmt.table_name)
+
+                if schema is None:
+                    print(f"No scema!")
+                    return False
+
+                try:
+                    indexes = [schema.index(col) for col in stmt.columns]
+                except ValueError as e:
+                    print(f"Column not found: {e}")
+                    return False
+                selected = [parts[i] for i in indexes if i < len(parts)]
                 print(" | ".join(selected))
             return True
 

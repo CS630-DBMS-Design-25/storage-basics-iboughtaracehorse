@@ -8,6 +8,9 @@ from lark import Lark
 from sql import SQLTransformer
 from sqlast import CreateTable, Insert, Select
 
+from logical_plan import TableScan, Projection, Selection, Filter
+from physical_plan import SeqScanOperator, ProjectionOperator, FilterOperator
+
 class StorageLayer(ABC):
     """Abstract base class that defines the interface for a simple storage system.
     Students will need to implement a concrete subclass of this interface."""
@@ -330,16 +333,38 @@ class FileStorageLayer(StorageLayer):
         self.buffer = {}
         # Implement flush logic
 
+def convert_ast_to_logical(ast_node, storage=None, schema=None):
+    if isinstance(ast_node, Select):
+        cond = ast_node.condition
+        if cond and hasattr(cond, 'data') and cond.data == 'condition':
+            # Unwrap to Condition object, or manually convert here if needed
+            # Or raise error if missing transformer logic
+            raise Exception("Condition still a Tree node; transformer likely incomplete")
+
+        scan = TableScan(ast_node.table_name)
+        if cond:
+            scan = Filter(scan, cond)
+        proj = Projection(ast_node.columns, scan)
+        return proj
+
+def convert_logical_to_physical(plan, storage, schema):
+    if isinstance(plan, Projection):
+        child = convert_logical_to_physical(plan.child, storage, schema)
+        return ProjectionOperator(plan.columns, child, schema)
+    elif isinstance(plan, TableScan):
+        return SeqScanOperator(plan.table_name, storage)
+    elif isinstance(plan, Filter):
+        child = convert_logical_to_physical(plan.child, storage, schema)
+        return FilterOperator(plan.condition, child, schema)
+    else:
+        print("Unknown plan node:", type(plan))
+        return None
+
 def execute_sql(stmt, storage):
-
-    if not storage.is_open or not storage.storage_path:
-        print("OPEN FIRTS!!!!!")
-        return
-
     if isinstance(stmt, CreateTable):
-
+        # Create table logic
         if len(stmt.columns) != len(set(stmt.columns)):
-            print(f"please do not enter duplicate columns while using CREATE TABLE {stmt.table_name}")
+            print(f"Error: Duplicate columns in CREATE TABLE {stmt.table_name}")
             return
 
         print(f"Creating table '{stmt.table_name}' with columns: {stmt.columns}")
@@ -347,62 +372,81 @@ def execute_sql(stmt, storage):
         storage.schemas[stmt.table_name] = stmt.columns
         storage.buffer[stmt.table_name] = {}
         storage.next_r_id[stmt.table_name] = 1
-
         storage.save_schema(stmt.table_name)
 
     elif isinstance(stmt, Insert):
-
+        # Insert logic
         if stmt.table_name not in storage.schemas:
-            print(f"Table '{stmt.table_name}' does not exist")
+            print(f"Error: Table '{stmt.table_name}' does not exist")
             return
 
         schema = storage.schemas[stmt.table_name]
 
         if len(stmt.values) != len(schema):
-            print(f"Insert column value does not match schema!!!")
+            print(f"Error: Insert column count does not match schema for table '{stmt.table_name}'")
             return
 
+        # Join values into a newline-separated string for storage
         values_joined = "\n".join(map(str, stmt.values)).encode()
         r_id = storage.insert(stmt.table_name, values_joined)
         print(f"Inserted into {stmt.table_name} with ID {r_id}")
 
+
     elif isinstance(stmt, Select):
 
-        def callback(rid, record):
-            print("ID:", rid)
-            parts = record.decode().split("\n")
+        #print(f"DEBUG: columns = {stmt.columns}, type = {type(stmt.columns)}")
 
-            if stmt.columns == ["*"]:
-                print(" | ".join(parts))
+        #print(f"DEBUG: stmt.table_name = {stmt.table_name}, type = {type(stmt.table_name)}")
+        #print(f"DEBUG: stmt.columns = {stmt.columns}, type = {type(stmt.columns)}")
 
-            else:
-                schema = storage.schemas.get(stmt.table_name)
+        schema = storage.schemas.get(stmt.table_name)
 
-                if schema is None:
-                    print(f"No scema!")
-                    return False
+        if schema is None:
+            print(f"Schema not found for table {stmt.table_name}")
 
-                try:
-                    indexes = [schema.index(col) for col in stmt.columns]
-                except ValueError as e:
-                    print(f"Column not found: {e}")
-                    return False
-                selected = [parts[i] for i in indexes if i < len(parts)]
-                print(" | ".join(selected))
-            return True
+            return
 
-        storage.scan(stmt.table_name, callback=callback)
+        logical_plan = convert_ast_to_logical(stmt, storage, schema)
+
+        physical_plan = convert_logical_to_physical(logical_plan, storage, schema)
+
+        if physical_plan is None:
+            print("Error: Failed to build physical plan")
+            return
+
+        print(" | ".join(schema))
+
+        for row in physical_plan.execute():
+            fields = [str(field) for field in row]
+            print(" | ".join(fields))
 
     else:
-        print("Unknown SQL statement:", stmt)
+        print(f"Unknown statement type: {type(stmt)}")
 
-def main(): 
-    storage = FileStorageLayer()  # Students will implement this class
+def main():
+
+    cli_parser = argparse.ArgumentParser(description="Storage Layer CLI")
+    cli_parser.add_argument("--query", help="SQL query to execute")
+    cli_parser.add_argument("--storage-path", required=True, help="Path to storage directory")
+
+    args = cli_parser.parse_args()
+
+    storage = FileStorageLayer()
+    storage.open(args.storage_path)
 
     with open("sql.lark") as f:
         grammar = f.read()
 
     sql_parser = Lark(grammar, parser="lalr", transformer=SQLTransformer())
+
+    if args.query:
+        try:
+            stmts = sql_parser.parse(args.query)
+            for stmt in stmts:
+                execute_sql(stmt, storage)
+        except Exception as e:
+            print("SQL Error:", e)
+        return
 
     parser = argparse.ArgumentParser(description="CLI for StorageLayer Testing")
     subparsers = parser.add_subparsers(dest="command", help="Command to execute")
@@ -457,7 +501,10 @@ def main():
                     print("SQL Error:", e)
                 continue
 
-            args = parser.parse_args(command_input.split())
+            try:
+                args = parser.parse_args(command_input.split())
+            except SystemExit:
+                continue
 
             if args.command == 'open':
                 storage.open(args.path)
@@ -491,8 +538,10 @@ def main():
             else:
                 print(f"Unknown command: {args.command}")
 
-        except SystemExit:
-            continue
+
+        except KeyboardInterrupt:
+            print("\nExiting...")
+            break
         except Exception as e:
             print(f"Error: {e}")
 

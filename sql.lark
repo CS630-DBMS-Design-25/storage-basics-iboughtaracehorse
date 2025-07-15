@@ -10,12 +10,20 @@ column_def_list: NAME ("," NAME)*
 insert_stmt: "INSERT" "INTO" NAME "VALUES" "(" value_list ")"
 value_list: value ("," value)*
 
-select_stmt: "SELECT" column_list "FROM" NAME
-column_list: "*" -> select_all
-           | NAME ("," NAME)*
+select_stmt: "SELECT" column_list "FROM" NAME where_clause?
+where_clause: "WHERE" condition
+condition: NAME comparator value
 
-value: SIGNED_NUMBER     -> number
-     | ESCAPED_STRING    -> string
+column_list: "*"                      -> select_all
+           | NAME ("," NAME)*        -> select_columns
+
+value: SIGNED_NUMBER                 -> number
+     | ESCAPED_STRING               -> string
+
+comparator: "="  -> eq
+          | ">"  -> gt
+          | "<"  -> lt
+          | "!=" -> neq
 
 %import common.CNAME -> NAME
 %import common.SIGNED_NUMBER

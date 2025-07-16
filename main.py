@@ -3,13 +3,17 @@ import os
 import struct
 from abc import ABC, abstractmethod
 from typing import Callable, Optional, List
+from tabulate import tabulate
 
 from lark import Lark
 from sql import SQLTransformer
 from sqlast import CreateTable, Insert, Select, Delete
 
 from logical_plan import TableScan, Projection, Selection, Filter, OrderBy, Limit
-from physical_plan import SeqScanOperator, ProjectionOperator, FilterOperator, OrderByOperator, LimitOperator
+from physical_plan import SeqScanOperator, ProjectionOperator, FilterOperator, OrderByOperator, LimitOperator, DeleteOperator
+
+def print_table(schema, rows):
+    print(tabulate(rows, headers=schema, tablefmt="grid"))
 
 class StorageLayer(ABC):
     """Abstract base class that defines the interface for a simple storage system.
@@ -276,6 +280,21 @@ class FileStorageLayer(StorageLayer):
 
         path = os.path.join(self.storage_path, table)
         result = []
+        seen_ids = set()
+
+        if table in self.buffer:
+            for r_id, record in self.buffer[table].items():
+                if filter_func and not filter_func(record):
+                    continue
+                if callback and not callback(r_id, record):
+                    return result
+                if projection:
+                    parts = record.decode().split("\n")
+                    projected = [parts[i] for i in projection if i < len(parts)]
+                    result.append(" | ".join(projected).encode())
+                else:
+                    result.append(record)
+                seen_ids.add(r_id)
 
         with open(path, "rb") as file:
             while True:
@@ -296,6 +315,9 @@ class FileStorageLayer(StorageLayer):
                 if callback:
                     if not callback(r_id, record):
                         break
+
+                if r_id in seen_ids:
+                    continue
 
                 if filter_func:
                     if not filter_func(record):
@@ -352,6 +374,9 @@ def convert_ast_to_logical(ast_node, storage=None, schema=None):
 
         return plan
 
+    elif isinstance(ast_node, Delete):
+        return Delete(ast_node.table_name, ast_node.condition)
+
 def convert_logical_to_physical(plan, storage, schema):
 
     if isinstance(plan, Projection):
@@ -373,6 +398,9 @@ def convert_logical_to_physical(plan, storage, schema):
         child = convert_logical_to_physical(plan.child, storage, schema)
         return LimitOperator(plan.count, child)
 
+    elif isinstance(plan, Delete):
+        return DeleteOperator(plan.table_name, plan.condition, storage, schema)
+
     else:
         print("Unknown plan node:", type(plan))
         return None
@@ -392,7 +420,6 @@ def execute_sql(stmt, storage):
         storage.save_schema(stmt.table_name)
 
     elif isinstance(stmt, Insert):
-        # Insert logic
         if stmt.table_name not in storage.schemas:
             print(f"Error: Table '{stmt.table_name}' does not exist")
             return
@@ -423,46 +450,53 @@ def execute_sql(stmt, storage):
             return
 
         logical_plan = convert_ast_to_logical(stmt, storage, schema)
-
         physical_plan = convert_logical_to_physical(logical_plan, storage, schema)
 
         if physical_plan is None:
             print("Error: Failed to build physical plan")
             return
 
-        print(" | ".join(schema))
+        rows = list(physical_plan.execute())
 
-        for row in physical_plan.execute():
-            fields = [str(field) for field in row]
-            print(" | ".join(fields))
+        decoded_rows = []
+        for row in rows:
+            decoded_row = []
+            for field in row:
+                if isinstance(field, bytes):
+                    decoded_row.extend(field.decode().split("\n"))
+                else:
+                    decoded_row.append(str(field))
+            decoded_rows.append(decoded_row)
+
+        if stmt.columns == ['*']:
+            display_schema = schema
+        else:
+            display_schema = stmt.columns
+
+        print_table(schema, decoded_rows)
+
 
     elif isinstance(stmt, Delete):
 
         schema = storage.schemas.get(stmt.table_name)
 
-        if not schema:
-            print(f"Table {stmt.table_name} not found")
+        if schema is None:
+            print(f"Error: Table '{stmt.table_name}' not found")
+
             return
 
-        def condition_fn(record):
-            fields = record.decode().split("\n")
-            row = dict(zip(schema, fields))
-            if stmt.condition.op == "=":
-                return row[stmt.condition.column] == str(stmt.condition.value)
-            elif stmt.condition.op == "!=":
-                return row[stmt.condition.column] != str(stmt.condition.value)
-            elif stmt.condition.op == ">":
-                return int(row[stmt.condition.column]) > int(stmt.condition.value)
-            elif stmt.condition.op == "<":
-                return int(row[stmt.condition.column]) < int(stmt.condition.value)
-            else:
-                return False
+        logical_plan = convert_ast_to_logical(stmt, storage, schema)
 
-        all_records = storage.scan(stmt.table_name)
-        for record_id, record in storage.buffer.get(stmt.table_name, {}).items():
-            if condition_fn(record):
-                storage.delete(stmt.table_name, record_id)
-                print(f"Deleted record ID {record_id}")
+        physical_plan = convert_logical_to_physical(logical_plan, storage, schema)
+
+        if physical_plan is None:
+            print("Error: Failed to build physical plan for DELETE")
+
+            return
+
+        physical_plan.execute()
+
+        print("Delete executed")
 
     else:
         print(f"Unknown statement type: {type(stmt)}")

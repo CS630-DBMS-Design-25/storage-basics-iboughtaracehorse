@@ -22,7 +22,11 @@ class ProjectionOperator(PhysicalOperator):
 
     def execute(self):
         for row in self.child.execute():
-            yield [row[i] for i in self.column_indexes]
+            if isinstance(row, bytes):
+                parts = row.decode().split("\n")
+            else:
+                parts = row
+            yield [parts[i] for i in self.column_indexes]
 
 class FilterOperator(PhysicalOperator):
 
@@ -37,7 +41,7 @@ class FilterOperator(PhysicalOperator):
         index = self.schema.index(self.condition.column)
         op = self.condition.op
         val = self.condition.value
-        result = []
+        #result = []
 
         for row in input_rows:
 
@@ -82,3 +86,55 @@ class OrderByOperator:
         idx = self.child.schema.index(self.column)
         reverse = self.direction == "desc"
         return sorted(rows, key=lambda row: row[idx], reverse=reverse)
+
+class DeleteOperator(PhysicalOperator):
+    def __init__(self, table_name, condition, storage, schema):
+        self.table_name = table_name
+        self.condition = condition
+        self.storage = storage
+        self.schema = schema
+
+    def execute(self):
+
+        def condition_fn(record):
+
+            if not self.condition:
+                return True
+
+            fields = record.decode().split("\n")
+            row = dict(zip(self.schema, fields))
+            op = self.condition.op
+            col = self.condition.column
+            val = self.condition.value
+            cell = row.get(col)
+
+            if cell is None:
+                return False
+            try:
+                cell_val = int(cell)
+                compare_val = int(val)
+            except:
+                cell_val = cell
+                compare_val = val
+
+            if op == "=":
+                return cell_val == compare_val
+            elif op == "!=":
+                return cell_val != compare_val
+            elif op == ">":
+                return cell_val > compare_val
+            elif op == "<":
+                return cell_val < compare_val
+            else:
+                return False
+
+        records_to_delete = []
+        for record_id, record in self.storage.buffer.get(self.table_name, {}).items():
+            if condition_fn(record):
+                records_to_delete.append(record_id)
+
+        for record_id in records_to_delete:
+            self.storage.delete(self.table_name, record_id)
+            print(f"Deleted record ID {record_id}")
+
+        return []

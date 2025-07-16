@@ -1,5 +1,5 @@
 from lark import Transformer
-from sqlast import CreateTable, Insert, Select, Condition
+from sqlast import CreateTable, Insert, Select, Condition, Delete
 
 class SQLTransformer(Transformer):
     def NAME(self, token):
@@ -52,11 +52,35 @@ class SQLTransformer(Transformer):
     def select_columns(self, items):
         return [str(item) for item in items]
 
+    def limit_clause(self, items):
+        return int(items[0])
+
+    def order_clause(self, items):
+        column = items[0]
+        direction = items[1] if len(items) > 1 else "ASC"
+        return (column, direction.upper())
+
     def select_stmt(self, items):
         columns = items[0]
         table_name = items[1]
-        condition = items[2] if len(items) > 2 else None
-        return Select(columns, table_name, condition)
+        condition = None
+        order_by = None
+        limit = None
+
+        for item in items[2:]:
+            if isinstance(item, Condition):
+                condition = item
+            elif isinstance(item, tuple):
+                order_by = item
+            elif isinstance(item, int):
+                limit = item
+
+        return Select(columns, table_name, condition, order_by, limit)
+
+    def delete_stmt(self, items):
+        table_name = items[0]
+        condition = items[1] if len(items) > 1 else None
+        return Delete(table_name, condition)
 
     def stmt(self, items):
         return items[0]

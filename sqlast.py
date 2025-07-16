@@ -20,9 +20,16 @@ class Insert(ASTNode):
         self.values = values
 
 class Select(ASTNode):
-    def __init__(self, columns: list[str], table_name: str, condition: Condition = None):
+    def __init__(self, columns, table_name, condition=None, order_by=None, limit=None):
         self.table_name = table_name
         self.columns = columns
+        self.condition = condition
+        self.order_by = order_by
+        self.limit = limit
+
+class Delete:
+    def __init__(self, table_name, condition=None):
+        self.table_name = table_name
         self.condition = condition
 
 

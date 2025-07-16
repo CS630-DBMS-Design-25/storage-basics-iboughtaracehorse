@@ -6,11 +6,10 @@ class SeqScanOperator(PhysicalOperator):
     def __init__(self, table_name, storage):
         self.table_name = table_name
         self.storage = storage
+        self.schema = storage.schemas[table_name]
 
     def execute(self):
-        rows = []
-        self.storage.scan(self.table_name, callback=lambda rid, r: rows.append(r))
-        return rows
+        return self.storage.scan(self.table_name)
 
 class ProjectionOperator(PhysicalOperator):
     def __init__(self, columns, child, schema):
@@ -23,7 +22,6 @@ class ProjectionOperator(PhysicalOperator):
 
     def execute(self):
         for row in self.child.execute():
-            # row is list or tuple of all fields
             yield [row[i] for i in self.column_indexes]
 
 class FilterOperator(PhysicalOperator):
@@ -61,3 +59,25 @@ class FilterOperator(PhysicalOperator):
                 result.append(row)
 
         return result
+
+class LimitOperator:
+
+    def __init__(self, count, child):
+        self.count = count
+        self.child = child
+
+    def execute(self):
+        return list(self.child.execute())[:self.count]
+
+class OrderByOperator:
+
+    def __init__(self, column, direction, child):
+        self.column = column
+        self.direction = direction
+        self.child = child
+
+    def execute(self):
+        rows = list(self.child.execute())
+        idx = self.child.schema.index(self.column)
+        reverse = self.direction == "desc"
+        return sorted(rows, key=lambda row: row[idx], reverse=reverse)

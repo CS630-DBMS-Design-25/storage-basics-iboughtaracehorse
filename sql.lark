@@ -3,6 +3,7 @@ start: stmt+
 stmt: create_stmt ";"
     | insert_stmt ";"
     | select_stmt ";"
+    | delete_stmt ";"
 
 create_stmt: "CREATE" "TABLE" NAME "(" column_def_list ")"
 column_def_list: NAME ("," NAME)*
@@ -10,8 +11,14 @@ column_def_list: NAME ("," NAME)*
 insert_stmt: "INSERT" "INTO" NAME "VALUES" "(" value_list ")"
 value_list: value ("," value)*
 
-select_stmt: "SELECT" column_list "FROM" NAME where_clause?
+delete_stmt: "DELETE" "FROM" NAME where_clause?
+
+select_stmt: "SELECT" column_list "FROM" NAME where_clause? order_clause? limit_clause?
+
 where_clause: "WHERE" condition
+order_clause: "ORDER" "BY" NAME ("ASC" | "DESC")?
+limit_clause: "LIMIT" SIGNED_NUMBER
+
 condition: NAME comparator value
 
 column_list: "*"                      -> select_all

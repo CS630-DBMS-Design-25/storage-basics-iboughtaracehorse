@@ -6,10 +6,10 @@ from typing import Callable, Optional, List
 
 from lark import Lark
 from sql import SQLTransformer
-from sqlast import CreateTable, Insert, Select
+from sqlast import CreateTable, Insert, Select, Delete
 
-from logical_plan import TableScan, Projection, Selection, Filter
-from physical_plan import SeqScanOperator, ProjectionOperator, FilterOperator
+from logical_plan import TableScan, Projection, Selection, Filter, OrderBy, Limit
+from physical_plan import SeqScanOperator, ProjectionOperator, FilterOperator, OrderByOperator
 
 class StorageLayer(ABC):
     """Abstract base class that defines the interface for a simple storage system.
@@ -58,7 +58,7 @@ class StorageLayer(ABC):
         pass
 
 
-# Example implementation stub for students to complete
+
 class FileStorageLayer(StorageLayer):
     """Example implementation of the StorageLayer interface.
     Students should fill in the method implementations."""
@@ -334,35 +334,45 @@ class FileStorageLayer(StorageLayer):
         # Implement flush logic
 
 def convert_ast_to_logical(ast_node, storage=None, schema=None):
-    if isinstance(ast_node, Select):
-        cond = ast_node.condition
-        if cond and hasattr(cond, 'data') and cond.data == 'condition':
-            # Unwrap to Condition object, or manually convert here if needed
-            # Or raise error if missing transformer logic
-            raise Exception("Condition still a Tree node; transformer likely incomplete")
 
-        scan = TableScan(ast_node.table_name)
-        if cond:
-            scan = Filter(scan, cond)
-        proj = Projection(ast_node.columns, scan)
-        return proj
+    if isinstance(ast_node, Select):
+        plan = TableScan(ast_node.table_name)
+
+        if ast_node.condition:
+            plan = Filter(plan, ast_node.condition)
+
+        if ast_node.order_by:
+            column, direction = ast_node.order_by
+            plan = OrderBy(column, direction, plan)
+
+        plan = Projection(ast_node.columns, plan)
+
+        return plan
 
 def convert_logical_to_physical(plan, storage, schema):
+
     if isinstance(plan, Projection):
         child = convert_logical_to_physical(plan.child, storage, schema)
         return ProjectionOperator(plan.columns, child, schema)
+
     elif isinstance(plan, TableScan):
         return SeqScanOperator(plan.table_name, storage)
+
     elif isinstance(plan, Filter):
         child = convert_logical_to_physical(plan.child, storage, schema)
         return FilterOperator(plan.condition, child, schema)
+
+    elif isinstance(plan, OrderBy):
+        child = convert_logical_to_physical(plan.child, storage, schema)
+        return OrderByOperator(plan.column, plan.direction, child)
+
     else:
         print("Unknown plan node:", type(plan))
         return None
 
 def execute_sql(stmt, storage):
     if isinstance(stmt, CreateTable):
-        # Create table logic
+
         if len(stmt.columns) != len(set(stmt.columns)):
             print(f"Error: Duplicate columns in CREATE TABLE {stmt.table_name}")
             return
@@ -386,7 +396,6 @@ def execute_sql(stmt, storage):
             print(f"Error: Insert column count does not match schema for table '{stmt.table_name}'")
             return
 
-        # Join values into a newline-separated string for storage
         values_joined = "\n".join(map(str, stmt.values)).encode()
         r_id = storage.insert(stmt.table_name, values_joined)
         print(f"Inserted into {stmt.table_name} with ID {r_id}")
@@ -419,6 +428,34 @@ def execute_sql(stmt, storage):
         for row in physical_plan.execute():
             fields = [str(field) for field in row]
             print(" | ".join(fields))
+
+    elif isinstance(stmt, Delete):
+
+        schema = storage.schemas.get(stmt.table_name)
+
+        if not schema:
+            print(f"Table {stmt.table_name} not found")
+            return
+
+        def condition_fn(record):
+            fields = record.decode().split("\n")
+            row = dict(zip(schema, fields))
+            if stmt.condition.op == "=":
+                return row[stmt.condition.column] == str(stmt.condition.value)
+            elif stmt.condition.op == "!=":
+                return row[stmt.condition.column] != str(stmt.condition.value)
+            elif stmt.condition.op == ">":
+                return int(row[stmt.condition.column]) > int(stmt.condition.value)
+            elif stmt.condition.op == "<":
+                return int(row[stmt.condition.column]) < int(stmt.condition.value)
+            else:
+                return False
+
+        all_records = storage.scan(stmt.table_name)
+        for record_id, record in storage.buffer.get(stmt.table_name, {}).items():
+            if condition_fn(record):
+                storage.delete(stmt.table_name, record_id)
+                print(f"Deleted record ID {record_id}")
 
     else:
         print(f"Unknown statement type: {type(stmt)}")

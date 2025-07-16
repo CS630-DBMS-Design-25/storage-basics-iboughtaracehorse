@@ -236,42 +236,39 @@ class FileStorageLayer(StorageLayer):
         # Implement update logic
 
     def delete(self, table: str, record_id: int) -> None:
-        """TODO: Implement this method to delete a record"""
+
+        if table in self.buffer and record_id in self.buffer[table]:
+            del self.buffer[table][record_id]
 
         path = os.path.join(self.storage_path, table)
-        cur_path = path + ".tmp"
-        can_delete = False
+        tmp_path = path + ".tmp"
+        found = False
 
-        with open(path, "rb") as input_file, open(cur_path, "wb") as output_file:
+        with open(path, "rb") as f_in, open(tmp_path, "wb") as f_out:
             while True:
-
-                b_id = input_file.read(4)
-
+                b_id = f_in.read(4)
                 if not b_id:
                     break
-
                 r_id = struct.unpack(">I", b_id)[0]
-                b_len = input_file.read(4)
-
+                b_len = f_in.read(4)
                 if not b_len:
                     break
-
                 length = struct.unpack(">I", b_len)[0]
-                record = input_file.read(length)
+                record = f_in.read(length)
 
                 if r_id == record_id:
-                    can_delete = True
+                    found = True
                     continue
 
-                output_file.write(b_id)
-                output_file.write(b_len)
-                output_file.write(record)
+                f_out.write(b_id)
+                f_out.write(b_len)
+                f_out.write(record)
 
-        if not can_delete:
-            os.remove(cur_path)
-            print("Record not found")
+        if found:
+            os.replace(tmp_path, path)
         else:
-            os.replace(cur_path, path)
+            os.remove(tmp_path)
+            print("Record not found")
 
     def scan(self, table: str, callback: Optional[Callable[[int, bytes], bool]] = None,
              projection: Optional[List[int]] = None, filter_func: Optional[Callable[[bytes], bool]] = None) -> List[

@@ -95,9 +95,7 @@ class DeleteOperator(PhysicalOperator):
         self.schema = schema
 
     def execute(self):
-
         def condition_fn(record):
-
             if not self.condition:
                 return True
 
@@ -128,13 +126,17 @@ class DeleteOperator(PhysicalOperator):
             else:
                 return False
 
-        records_to_delete = []
-        for record_id, record in self.storage.buffer.get(self.table_name, {}).items():
+        buffer = self.storage.buffer.get(self.table_name, {})
+        print(f"Buffer before delete: {len(buffer)} records")
+
+        to_delete = []
+        for record_id, record in list(buffer.items()):
             if condition_fn(record):
-                records_to_delete.append(record_id)
+                to_delete.append(record_id)
 
-        for record_id in records_to_delete:
+        for record_id in to_delete:
+            print(f"Deleting record ID: {record_id}")
             self.storage.delete(self.table_name, record_id)
-            print(f"Deleted record ID {record_id}")
 
+        print(f"Buffer after delete: {len(self.storage.buffer.get(self.table_name, {}))} records")
         return []

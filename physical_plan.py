@@ -41,7 +41,10 @@ class FilterOperator(PhysicalOperator):
 
         for row in input_rows:
 
-            parts = row.decode().split("\n")
+            if isinstance(row, bytes):
+                parts = row.decode().split("\n")
+            else:
+                parts = row
 
             if index >= len(parts):
                 continue
@@ -56,9 +59,7 @@ class FilterOperator(PhysicalOperator):
                 compare_val = val
 
             if eval(f"{repr(cell_val)} {op} {repr(compare_val)}"):
-                result.append(row)
-
-        return result
+                yield parts
 
 class LimitOperator:
 

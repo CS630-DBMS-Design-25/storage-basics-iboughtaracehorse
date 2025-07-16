@@ -9,7 +9,7 @@ from sql import SQLTransformer
 from sqlast import CreateTable, Insert, Select, Delete
 
 from logical_plan import TableScan, Projection, Selection, Filter, OrderBy, Limit
-from physical_plan import SeqScanOperator, ProjectionOperator, FilterOperator, OrderByOperator
+from physical_plan import SeqScanOperator, ProjectionOperator, FilterOperator, OrderByOperator, LimitOperator
 
 class StorageLayer(ABC):
     """Abstract base class that defines the interface for a simple storage system.
@@ -345,6 +345,9 @@ def convert_ast_to_logical(ast_node, storage=None, schema=None):
             column, direction = ast_node.order_by
             plan = OrderBy(column, direction, plan)
 
+        if ast_node.limit is not None:
+            plan = LimitOperator(ast_node.limit, plan)
+
         plan = Projection(ast_node.columns, plan)
 
         return plan
@@ -365,6 +368,10 @@ def convert_logical_to_physical(plan, storage, schema):
     elif isinstance(plan, OrderBy):
         child = convert_logical_to_physical(plan.child, storage, schema)
         return OrderByOperator(plan.column, plan.direction, child)
+
+    elif isinstance(plan, LimitOperator):
+        child = convert_logical_to_physical(plan.child, storage, schema)
+        return LimitOperator(plan.count, child)
 
     else:
         print("Unknown plan node:", type(plan))

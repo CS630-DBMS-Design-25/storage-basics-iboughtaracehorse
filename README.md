@@ -1,8 +1,4 @@
-Here’s an updated version of your `README.md` with a new section for **Testing**, explaining how to run the tests and what they cover, including usage of `scan`:
 
----
-
-````markdown
 # FileStorageLayer
 
 A simple file-based storage layer that supports basic operations like `insert`, `get`, `update`, `delete`, `flush`, and `scan`. The storage engine is built to mimic a simple table-based database where records are stored in binary format.

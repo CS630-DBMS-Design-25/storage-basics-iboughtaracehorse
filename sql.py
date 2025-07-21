@@ -56,9 +56,18 @@ class SQLTransformer(Transformer):
         return int(items[0])
 
     def order_clause(self, items):
-        column = items[0]
-        direction = items[1] if len(items) > 1 else "ASC"
-        return (column, direction.upper())
+        column = str(items[0])
+        direction_node = items[1] if len(items) > 1 else None
+
+        if direction_node is None:
+            direction = "ASC"
+        else:
+            direction = direction_node.children[0].value.upper()
+
+        print(f"Order clause raw items: {items}")
+        print(f"Parsed order direction: {direction}")
+
+        return (column, direction)
 
     def select_stmt(self, items):
         columns = items[0]

@@ -78,14 +78,25 @@ class OrderByOperator:
 
     def __init__(self, column, direction, child):
         self.column = column
-        self.direction = direction
+        self.direction = direction.lower() if direction else "asc"
         self.child = child
 
     def execute(self):
         rows = list(self.child.execute())
+
+        if not hasattr(self.child, "schema") or self.column not in self.child.schema:
+            print("Schema or column not found in child operator")
+            return rows
+
         idx = self.child.schema.index(self.column)
         reverse = self.direction == "desc"
-        return sorted(rows, key=lambda row: row[idx], reverse=reverse)
+
+        split_rows = [row.decode().split("\n") for row in rows]
+
+        sorted_rows = sorted(split_rows, key=lambda row: row[idx], reverse=reverse)
+
+        for fields in sorted_rows:
+            yield "\n".join(fields).encode()
 
 class DeleteOperator(PhysicalOperator):
     def __init__(self, table_name, condition, storage, schema):

@@ -365,7 +365,9 @@ def convert_ast_to_logical(ast_node, storage=None, schema=None):
             plan = Filter(plan, ast_node.condition)
 
         if ast_node.order_by:
+            print(f"Order clause found: {ast_node.order_by}")
             column, direction = ast_node.order_by
+            direction = direction.lower() if direction else "asc"
             plan = OrderBy(column, direction, plan)
 
         if ast_node.limit is not None:

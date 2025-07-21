@@ -16,7 +16,7 @@ delete_stmt: "DELETE" "FROM" NAME where_clause?
 select_stmt: "SELECT" column_list "FROM" NAME where_clause? order_clause? limit_clause?
 
 where_clause: "WHERE" condition
-order_clause: "ORDER" "BY" NAME ("ASC" | "DESC")?
+order_clause: "ORDER" "BY" NAME order_dir?
 limit_clause: "LIMIT" SIGNED_NUMBER
 
 condition: NAME comparator value
@@ -37,3 +37,8 @@ comparator: "="  -> eq
 %import common.ESCAPED_STRING
 %import common.WS
 %ignore WS
+
+ASC: "ASC"
+DESC: "DESC"
+
+order_dir: ASC | DESC

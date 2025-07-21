@@ -61,5 +61,43 @@ class TestFileStorageLayer(unittest.TestCase):
         self.storage.flush()
         self.assertFalse(self.storage.buffer)
 
+    def test_scan_with_projection(self):
+        self.storage.insert(self.table, b"first_record")
+        self.storage.insert(self.table, b"second_record")
+        self.storage.flush()
+        result = self.storage.scan(self.table, projection=[0])
+        self.assertEqual(len(result), 2)
+        for record in result:
+            self.assertIsInstance(record, bytes)
+
+    def test_scan_with_custom_callback(self):
+        records = [b"x", b"y", b"z"]
+        for r in records:
+            self.storage.insert(self.table, r)
+        self.storage.flush()
+
+        collected = []
+
+        def callback(record_id, record):
+            collected.append((record_id, record))
+            return True
+
+        self.storage.scan(self.table, callback=callback)
+
+        self.assertEqual(len(collected), len(records))
+        for _, r in collected:
+            self.assertIn(r, records)
+
+    def test_scan_filter_and_projection_combined(self):
+        self.storage.insert(self.table, b"zebra")
+        self.storage.insert(self.table, b"zoo")
+        self.storage.insert(self.table, b"apple")
+        self.storage.flush()
+
+        def starts_with_z(r): return r.startswith(b"z")
+        result = self.storage.scan(self.table, filter_func=starts_with_z, projection=[0])
+        self.assertEqual(len(result), 2)
+        self.assertTrue(all(r.startswith("z") for r in result))
+
 if __name__ == '__main__':
     unittest.main()

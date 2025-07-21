@@ -1,8 +1,3 @@
-Here’s an updated version of your `README.md` with a new section for **Testing**, explaining how to run the tests and what they cover, including usage of `scan`:
-
----
-
-````markdown
 # FileStorageLayer
 
 A simple file-based storage layer that supports basic operations like `insert`, `get`, `update`, `delete`, `flush`, and `scan`. The storage engine is built to mimic a simple table-based database where records are stored in binary format.
@@ -71,6 +66,60 @@ def my_callback(r_id, r):
     return True
 
 storage.scan("products", callback=my_callback)
+```
+
+## Initialization
+
+Before using the storage, call:
+
+```python
+storage.open("directory_path")
+```
+
+This will create the directory if it doesn't exist and prepare internal structures.
+
+To release resources, call:
+
+python
+Копировать
+Редактировать
+storage.close()
+yaml
+Копировать
+Редактировать
+
+---
+
+### **Data Format Explanation**
+
+Explain how data is stored on disk (binary format, record layout):
+
+```markdown
+## Data Storage Format
+
+Records are stored in files named after tables inside the storage directory.
+
+Each record is stored as:
+
+- 4 bytes: Record ID (big-endian unsigned int)
+- 4 bytes: Length of record data (big-endian unsigned int)
+- Variable bytes: Raw record bytes (usually UTF-8 encoded string or binary)
+
+This allows fast random access and simple update/delete operations.
+```
+
+## Buffering and Flushing
+
+Inserted and updated records are first kept in memory buffers for performance.
+
+Call `flush()` to write all buffered changes to disk.
+
+Example:
+
+```python
+storage.insert("products", b"New Item")
+
+storage.flush()  # Saves buffered changes to disk
 ```
 
 ## Testing

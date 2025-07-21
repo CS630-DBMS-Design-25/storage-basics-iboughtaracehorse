@@ -99,5 +99,29 @@ class TestFileStorageLayer(unittest.TestCase):
         self.assertEqual(len(result), 2)
         self.assertTrue(all(r.startswith("z") for r in result))
 
+    def test_delete_from_buffer(self):
+        record = b"in-buffer"
+        record_id = self.storage.insert(self.table, record)
+        self.storage.delete(self.table, record_id)
+        result = self.storage.get(self.table, record_id)
+        self.assertIsNone(result)
+
+    def test_delete_from_disk(self):
+        record = b"on-disk"
+        record_id = self.storage.insert(self.table, record)
+        self.storage.flush()
+        self.storage.delete(self.table, record_id)
+        result = self.storage.get(self.table, record_id)
+        self.assertIsNone(result)
+
+    def test_deleted_record_not_in_scan(self):
+        id1 = self.storage.insert(self.table, b"keep")
+        id2 = self.storage.insert(self.table, b"delete_me")
+        self.storage.flush()
+        self.storage.delete(self.table, id2)
+        scanned = self.storage.scan(self.table)
+        self.assertIn(b"keep", scanned)
+        self.assertNotIn(b"delete_me", scanned)
+
 if __name__ == '__main__':
     unittest.main()

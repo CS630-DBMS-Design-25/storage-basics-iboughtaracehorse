@@ -244,31 +244,35 @@ class FileStorageLayer(StorageLayer):
         tmp_path = path + ".tmp"
         found = False
 
-        with open(path, "rb") as f_in, open(tmp_path, "wb") as f_out:
-            while True:
-                b_id = f_in.read(4)
-                if not b_id:
-                    break
-                r_id = struct.unpack(">I", b_id)[0]
-                b_len = f_in.read(4)
-                if not b_len:
-                    break
-                length = struct.unpack(">I", b_len)[0]
-                record = f_in.read(length)
+        if not os.path.exists(path):
+            open(path, "ab").close()
 
-                if r_id == record_id:
-                    found = True
-                    continue
+        if os.path.exists(path):
+            with open(path, "rb") as f_in, open(tmp_path, "wb") as f_out:
+                while True:
+                    b_id = f_in.read(4)
+                    if not b_id:
+                        break
+                    r_id = struct.unpack(">I", b_id)[0]
+                    b_len = f_in.read(4)
+                    if not b_len:
+                        break
+                    length = struct.unpack(">I", b_len)[0]
+                    record = f_in.read(length)
 
-                f_out.write(b_id)
-                f_out.write(b_len)
-                f_out.write(record)
+                    if r_id == record_id:
+                        found = True
+                        continue
 
-        if found:
-            os.replace(tmp_path, path)
-        else:
-            os.remove(tmp_path)
-            print("Record not found")
+                    f_out.write(b_id)
+                    f_out.write(b_len)
+                    f_out.write(record)
+
+            if found:
+                os.replace(tmp_path, path)
+            else:
+                os.remove(tmp_path)
+                print("Record not found")
 
     def scan(self, table: str, callback: Optional[Callable[[int, bytes], bool]] = None,
              projection: Optional[List[int]] = None, filter_func: Optional[Callable[[bytes], bool]] = None) -> List[

@@ -1,3 +1,7 @@
+import os
+import struct
+
+
 class PhysicalOperator:
     def execute(self):
         raise NotImplementedError
@@ -109,14 +113,12 @@ class DeleteOperator(PhysicalOperator):
         def condition_fn(record):
             if not self.condition:
                 return True
-
             fields = record.decode().split("\n")
             row = dict(zip(self.schema, fields))
             op = self.condition.op
             col = self.condition.column
             val = self.condition.value
             cell = row.get(col)
-
             if cell is None:
                 return False
             try:
@@ -125,7 +127,6 @@ class DeleteOperator(PhysicalOperator):
             except:
                 cell_val = cell
                 compare_val = val
-
             if op == "=":
                 return cell_val == compare_val
             elif op == "!=":
@@ -138,16 +139,32 @@ class DeleteOperator(PhysicalOperator):
                 return False
 
         buffer = self.storage.buffer.get(self.table_name, {})
-        print(f"Buffer before delete: {len(buffer)} records")
-
-        to_delete = []
-        for record_id, record in list(buffer.items()):
-            if condition_fn(record):
-                to_delete.append(record_id)
-
+        to_delete = [rid for rid, rec in buffer.items() if condition_fn(rec)]
         for record_id in to_delete:
-            print(f"Deleting record ID: {record_id}")
+            print(f"Deleting record ID from buffer: {record_id}")
             self.storage.delete(self.table_name, record_id)
 
-        print(f"Buffer after delete: {len(self.storage.buffer.get(self.table_name, {}))} records")
+        disk_records = []
+        path = os.path.join(self.storage.storage_path, self.table_name)
+        if os.path.exists(path):
+            with open(path, "rb") as f:
+                while True:
+                    b_id = f.read(4)
+                    if not b_id:
+                        break
+                    record_id = struct.unpack(">I", b_id)[0]
+                    b_len = f.read(4)
+                    if not b_len:
+                        break
+                    length = struct.unpack(">I", b_len)[0]
+                    record = f.read(length)
+                    disk_records.append((record_id, record))
+
+        to_delete_disk = [rid for rid, rec in disk_records if condition_fn(rec)]
+
+        for record_id in to_delete_disk:
+            if not (self.table_name in self.storage.buffer and record_id in self.storage.buffer[self.table_name]):
+                print(f"Deleting record ID from disk: {record_id}")
+                self.storage.delete(self.table_name, record_id)
+
         return []

@@ -1,3 +1,6 @@
+import math
+
+
 horses = [
     ["id", "name", "stable_id", "speed"],
     ["1", "Thunder", "10", "45"],
@@ -62,6 +65,125 @@ def merge_join(table1, table2, column1, column2):
 
     return result
 
+def aggregate_sum(table, column):
+
+    header = table[0]
+    idx = header.index(column)
+    total = 0.0
+
+    for row in table[1:]:
+        total += float(row[idx])
+    return total
+
+def aggregate_avg(table, column):
+
+    header = table[0]
+    idx = header.index(column)
+    total = 0.0
+    counter = 0
+
+    for row in table[1:]:
+        total += float(row[idx])
+        counter += 1
+    return total / counter if counter > 0 else None
+
+def aggregate_min(table, column):
+
+    header = table[0]
+    idx = header.index(column)
+    min_value = None
+
+    for row in table[1:]:
+        val = float(row[idx])
+        if min_value is None or val < min_value:
+            min_value = val
+    return min_value
+
+def aggregate_max(table, column):
+
+    header = table[0]
+    idx = header.index(column)
+    max_value = None
+
+    for row in table[1:]:
+        val = float(row[idx])
+        if max_value is None or val > max_value:
+            max_value = val
+    return max_value
+
+def scalar_abs(table, column):
+    header = table[0]
+    idx = header.index(column)
+
+    result = [header[:]]
+
+    for row in table[1:]:
+        new_row = row[:]
+        val = float(new_row[idx])
+        new_row[idx] = str(abs(val))
+        result.append(new_row)
+
+    return result
+
+def scalar_sqrt(table, column):
+    header = table[0]
+    idx = header.index(column)
+
+    result = [header[:]]
+
+    for row in table[1:]:
+        new_row = row[:]
+        val = float(new_row[idx])
+        new_row[idx] = str(math.sqrt(val))
+        result.append(new_row)
+
+    return result
+
+def scalar_pow(table, column, power):
+    header = table[0]
+    idx = header.index(column)
+
+    result = [header[:]]
+
+    for row in table[1:]:
+        new_row = row[:]
+        val = float(new_row[idx])
+        new_row[idx] = str(pow(val, power))
+        result.append(new_row)
+
+    return result
+
 joined = merge_join(horses, stables, "stable_id", "stable_id")
-for row in joined:
-    print(row)
+print("Horses and Their Stables")
+print("-" * 40)
+for row in joined[1:]:
+    horse_id, horse_name, stable_id, speed, stable_name = row
+    print(f"Horse '{horse_name}' (ID: {horse_id}) gallops at speed {speed} km/h, thats pretty cool if u ask me. they stay in the very stayable stable '{stable_name}'")
+print("-" * 40)
+print()
+
+print("Speed Aggregation Stats")
+
+print(f"Total combined speed of all horses: {aggregate_sum(horses, 'speed')} km/h")
+
+print(f"Average speed: {aggregate_avg(horses, 'speed'):.2f} km/h")
+
+print(f"Slowest horse speed: {aggregate_min(horses, 'speed')} km/h")
+print(f"Fastest horse speed: {aggregate_max(horses, 'speed')} km/h")
+print()
+
+def print_speed_table(table, title):
+    print(f"** {title} **")
+    print("-" * 30)
+    for row in table[1:]:
+        print(f"{row[1]}: {row[3]} km/h")
+    print("-" * 30)
+    print()
+
+abs_speeds = scalar_abs(horses, "speed")
+sqrt_speeds = scalar_sqrt(horses, "speed")
+pow_speeds = scalar_pow(horses, "speed", 2)
+
+print_speed_table(abs_speeds, "Absolute Speeds: ")
+print_speed_table(sqrt_speeds, "Square Roots of Speeds: ")
+print_speed_table(pow_speeds, "Speeds Squared: ")
